@@ -211,38 +211,43 @@ function ProtectionModel_01b(config) {
     }
 
     function createKeySession(ksInfo) {
+        logger.warn('createKeySession');
         if (!keySystem) {
             throw new Error('Can not create sessions until you have selected a key system');
         }
 
         // Determine if creating a new session is allowed
         if (moreSessionsAllowed || sessions.length === 0) {
+            logger.warn('createKeySession:if');
             const newSession = { // Implements SessionToken
                 sessionId: null,
                 keyId: ksInfo.keyId,
                 initData: ksInfo.initData,
 
-                getKeyId: function () {
+                getKeyId: function() {
                     return this.keyId;
                 },
 
-                getSessionId: function () {
+                getSessionId: function() {
                     return this.sessionId;
                 },
 
-                getExpirationTime: function () {
+                getExpirationTime: function() {
                     return NaN;
                 },
 
-                getSessionType: function () {
+                getSessionType: function() {
                     return 'temporary';
                 }
             };
             pendingSessions.push(newSession);
 
             // Send our request to the CDM
-            videoElement[api.generateKeyRequest](keySystem.systemString, new Uint8Array(ksInfo.initData));
+            logger.warn(`videoElement.${api.generateKeyRequest}(${keySystem.systemString}, ${ksInfo.initData})`);
+            const a = videoElement[api.generateKeyRequest](keySystem.systemString, new Uint8Array(ksInfo.initData));
+            logger.warn(a);
 
+            logger.warn('createKeySession:end-if');
             return newSession;
 
         } else {
@@ -290,8 +295,9 @@ function ProtectionModel_01b(config) {
 
     function createEventHandler() {
         return {
-            handleEvent: function (event) {
+            handleEvent: function(event) {
                 let sessionToken = null;
+                logger.warn(event.type, api.needkey, api.keyerror);
                 switch (event.type) {
                     case api.needkey:
                         let initData = ArrayBuffer.isView(event.initData) ? event.initData.buffer : event.initData;
@@ -301,6 +307,7 @@ function ProtectionModel_01b(config) {
                     case api.keyerror:
                         sessionToken = findSessionByID(sessions, event.sessionId);
                         if (!sessionToken) {
+                            logger.warn('api.keyerror')
                             sessionToken = findSessionByID(pendingSessions, event.sessionId);
                         }
 
@@ -411,6 +418,7 @@ function ProtectionModel_01b(config) {
      * @returns {*} the session token with the given sessionId
      */
     function findSessionByID(sessionArray, sessionId) {
+        logger.warn(`findSessionByID: ${JSON.stringify(sessionId)} in ${JSON.stringify(sessionArray)}`);
         if (!sessionId || !sessionArray) {
             return null;
         } else {

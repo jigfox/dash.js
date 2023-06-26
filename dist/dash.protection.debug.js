@@ -1863,6 +1863,7 @@ function ProtectionController(config) {
 
 
   function _handleKeySystemFromPssh(supportedKs) {
+    logger.warn('_handleKeySystemFromPssh');
     pendingKeySessionsToHandle.push(supportedKs);
 
     _selectKeySystemOrUpdateKeySessions(supportedKs, false);
@@ -1876,13 +1877,20 @@ function ProtectionController(config) {
 
 
   function _selectKeySystemOrUpdateKeySessions(supportedKs, fromManifest) {
-    // First time, so we need to select a key system
+    logger.warn('_selectKeySystemOrUpdateKeySessions'); // First time, so we need to select a key system
+
     if (!selectedKeySystem && !keySystemSelectionInProgress) {
+      logger.warn('_selectKeySystemOrUpdateKeySessions:if');
+
       _selectInitialKeySystem(supportedKs, fromManifest);
     } // We already selected a key system. We only need to trigger a new license exchange if the init data has changed
     else if (selectedKeySystem) {
+      logger.warn('_selectKeySystemOrUpdateKeySessions:else-if');
+
       _handleKeySessions();
     }
+
+    logger.warn('_selectKeySystemOrUpdateKeySessions:end');
   }
   /**
    * We do not have a key system yet. Select one
@@ -1893,7 +1901,10 @@ function ProtectionController(config) {
 
 
   function _selectInitialKeySystem(supportedKs, fromManifest) {
+    logger.warn('_selectInitialKeySystem');
+
     if (!keySystemSelectionInProgress) {
+      logger.warn('_selectInitialKeySystem3');
       keySystemSelectionInProgress = true;
       var requestedKeySystems = []; // Reorder key systems according to priority order provided in protectionData
 
@@ -1958,11 +1969,14 @@ function ProtectionController(config) {
 
 
   function _handleKeySessions() {
-    // Create key sessions for the different AdaptationSets
+    logger.warn('_handleKeySessions'); // Create key sessions for the different AdaptationSets
+
     var ksIdx;
 
     for (var i = 0; i < pendingKeySessionsToHandle.length; i++) {
       for (ksIdx = 0; ksIdx < pendingKeySessionsToHandle[i].length; ksIdx++) {
+        logger.warn("".concat(i, ":").concat(ksIdx));
+
         if (selectedKeySystem === pendingKeySessionsToHandle[i][ksIdx].ks) {
           var current = pendingKeySessionsToHandle[i][ksIdx];
 
@@ -1983,7 +1997,9 @@ function ProtectionController(config) {
 
 
   function _loadOrCreateKeySession(keySystemInfo) {
-    // Clearkey
+    logger.warn('_loadOrCreateKeySession');
+    logger.warn(JSON.stringify(keySystemInfo)); // Clearkey
+
     if (protectionKeyController.isClearKey(selectedKeySystem)) {
       // For Clearkey: if parameters for generating init data was provided by the user, use them for generating
       // initData and overwrite possible initData indicated in encrypted event (EME)
@@ -1997,11 +2013,13 @@ function ProtectionController(config) {
 
 
     if (keySystemInfo.sessionId) {
-      // Load MediaKeySession with sessionId
+      logger.warn("_loadOrCreateKeySession:if ".concat(keySystemInfo.sessionId)); // Load MediaKeySession with sessionId
+
       loadKeySession(keySystemInfo);
     } // Create a new KeySession
     else if (keySystemInfo.initData !== null) {
-      // Create new MediaKeySession with initData
+      logger.warn('_loadOrCreateKeySession:eles-if'); // Create new MediaKeySession with initData
+
       createKeySession(keySystemInfo);
     }
   }
@@ -2033,31 +2051,45 @@ function ProtectionController(config) {
 
 
   function createKeySession(keySystemInfo) {
-    var initDataForKS = _CommonEncryption__WEBPACK_IMPORTED_MODULE_0__["default"].getPSSHForKeySystem(selectedKeySystem, keySystemInfo ? keySystemInfo.initData : null);
+    logger.warn('createKeySession');
+    var initDataForKS = null; //CommonEncryption.getPSSHForKeySystem(selectedKeySystem, keySystemInfo ? keySystemInfo.initData : null);
 
     if (initDataForKS) {
-      // Check for duplicate key id
+      logger.warn('createKeySession:if'); // Check for duplicate key id
+
       if (_isKeyIdDuplicate(keySystemInfo.keyId)) {
-        return;
-      } // Check for duplicate initData
-
-
-      if (_isInitDataDuplicate(initDataForKS)) {
+        logger.warn('createKeySession:if:if');
         return;
       }
 
+      logger.warn('do not check duplicate~~~~~~~~~~~~~~~~~'); // Check for duplicate initData
+      // if (_isInitDataDuplicate(initDataForKS)) {
+      //     return;
+      // }
+
       try {
+        logger.warn('createKeySession:try');
+        logger.warn(JSON.stringify(JSON.stringify(keySystemInfo.initData)));
+        logger.warn('createKeySession:try:2');
+        logger.warn(keySystemInfo.initData.constructor.name);
         keySystemInfo.initData = initDataForKS;
+        logger.warn(JSON.stringify(JSON.stringify(keySystemInfo.initData)));
+        logger.warn('createKeySession:try:3');
+        logger.warn(keySystemInfo.initData.constructor.name);
         protectionModel.createKeySession(keySystemInfo);
+        logger.warn('createKeySession:try-end');
       } catch (error) {
+        logger.warn('createKeySession:try-catch');
         eventBus.trigger(events.KEY_SESSION_CREATED, {
           data: null,
           error: new _vo_DashJSError__WEBPACK_IMPORTED_MODULE_4__["default"](_errors_ProtectionErrors__WEBPACK_IMPORTED_MODULE_3__["default"].KEY_SESSION_CREATED_ERROR_CODE, _errors_ProtectionErrors__WEBPACK_IMPORTED_MODULE_3__["default"].KEY_SESSION_CREATED_ERROR_MESSAGE + error.message)
         });
       }
     } else if (keySystemInfo && keySystemInfo.initData) {
+      logger.warn('createKeySession:else-if');
       protectionModel.createKeySession(keySystemInfo);
     } else {
+      logger.warn('createKeySession:else');
       eventBus.trigger(events.KEY_SESSION_CREATED, {
         data: null,
         error: new _vo_DashJSError__WEBPACK_IMPORTED_MODULE_4__["default"](_errors_ProtectionErrors__WEBPACK_IMPORTED_MODULE_3__["default"].KEY_SESSION_CREATED_ERROR_CODE, _errors_ProtectionErrors__WEBPACK_IMPORTED_MODULE_3__["default"].KEY_SESSION_CREATED_ERROR_MESSAGE + 'Selected key system is ' + (selectedKeySystem ? selectedKeySystem.systemString : null) + '.  needkey/encrypted event contains no initData corresponding to that key system!')
@@ -2145,28 +2177,27 @@ function ProtectionController(config) {
    * @return {boolean}
    * @private
    */
+  // function _isInitDataDuplicate(initDataForKS) {
+  //
+  //     if (!initDataForKS) {
+  //         return false;
+  //     }
+  //
+  //     try {
+  //         const currentInitData = protectionModel.getAllInitData();
+  //         for (let i = 0; i < currentInitData.length; i++) {
+  //             if (protectionKeyController.initDataEquals(initDataForKS, currentInitData[i])) {
+  //                 logger.debug('DRM: Ignoring initData because we have already seen it!');
+  //                 return true;
+  //             }
+  //         }
+  //
+  //         return false;
+  //     } catch (e) {
+  //         return false;
+  //     }
+  // }
 
-
-  function _isInitDataDuplicate(initDataForKS) {
-    if (!initDataForKS) {
-      return false;
-    }
-
-    try {
-      var currentInitData = protectionModel.getAllInitData();
-
-      for (var i = 0; i < currentInitData.length; i++) {
-        if (protectionKeyController.initDataEquals(initDataForKS, currentInitData[i])) {
-          logger.debug('DRM: Ignoring initData because we have already seen it!');
-          return true;
-        }
-      }
-
-      return false;
-    } catch (e) {
-      return false;
-    }
-  }
   /**
    * Removes the given key session from persistent storage and closes the session
    * as if {@link ProtectionController#closeKeySession}
@@ -2822,10 +2853,10 @@ function ProtectionController(config) {
         var initDataForKS = _CommonEncryption__WEBPACK_IMPORTED_MODULE_0__["default"].getPSSHForKeySystem(selectedKeySystem, abInitData);
 
         if (initDataForKS) {
-          // Check for duplicate initData
-          if (_isInitDataDuplicate(initDataForKS)) {
-            return;
-          }
+          logger.error('do not check duplicate***************************'); // Check for duplicate initData
+          // if (_isInitDataDuplicate(initDataForKS)) {
+          //     return;
+          // }
         }
       }
 
@@ -2836,6 +2867,8 @@ function ProtectionController(config) {
         logger.debug('DRM: Received needkey event with initData, but we don\'t support any of the key systems!');
         return;
       }
+
+      logger.error(JSON.stringify(supportedKs, null, 2));
 
       _handleKeySystemFromPssh(supportedKs);
     }
@@ -4445,12 +4478,15 @@ function ProtectionModel_01b(config) {
   }
 
   function createKeySession(ksInfo) {
+    logger.warn('createKeySession');
+
     if (!keySystem) {
       throw new Error('Can not create sessions until you have selected a key system');
     } // Determine if creating a new session is allowed
 
 
     if (moreSessionsAllowed || sessions.length === 0) {
+      logger.warn('createKeySession:if');
       var newSession = {
         // Implements SessionToken
         sessionId: null,
@@ -4471,7 +4507,10 @@ function ProtectionModel_01b(config) {
       };
       pendingSessions.push(newSession); // Send our request to the CDM
 
-      videoElement[api.generateKeyRequest](keySystem.systemString, new Uint8Array(ksInfo.initData));
+      logger.warn("videoElement.".concat(api.generateKeyRequest, "(").concat(keySystem.systemString, ", ").concat(ksInfo.initData, ")"));
+      var a = videoElement[api.generateKeyRequest](keySystem.systemString, new Uint8Array(ksInfo.initData));
+      logger.warn(a);
+      logger.warn('createKeySession:end-if');
       return newSession;
     } else {
       throw new Error('Multiple sessions not allowed!');
@@ -4522,6 +4561,7 @@ function ProtectionModel_01b(config) {
     return {
       handleEvent: function handleEvent(event) {
         var sessionToken = null;
+        logger.warn(event.type, api.needkey, api.keyerror);
 
         switch (event.type) {
           case api.needkey:
@@ -4535,6 +4575,7 @@ function ProtectionModel_01b(config) {
             sessionToken = findSessionByID(sessions, event.sessionId);
 
             if (!sessionToken) {
+              logger.warn('api.keyerror');
               sessionToken = findSessionByID(pendingSessions, event.sessionId);
             }
 
@@ -4661,6 +4702,8 @@ function ProtectionModel_01b(config) {
 
 
   function findSessionByID(sessionArray, sessionId) {
+    logger.warn("findSessionByID: ".concat(JSON.stringify(sessionId), " in ").concat(JSON.stringify(sessionArray)));
+
     if (!sessionId || !sessionArray) {
       return null;
     } else {

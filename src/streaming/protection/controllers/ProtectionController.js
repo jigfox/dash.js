@@ -36,7 +36,7 @@ import ProtectionErrors from '../errors/ProtectionErrors';
 import DashJSError from '../../vo/DashJSError';
 import LicenseRequest from '../vo/LicenseRequest';
 import LicenseResponse from '../vo/LicenseResponse';
-import {HTTPRequest} from '../../vo/metrics/HTTPRequest';
+import { HTTPRequest } from '../../vo/metrics/HTTPRequest';
 import Utils from '../../../core/Utils';
 import Constants from '../../constants/Constants';
 import FactoryMaker from '../../../core/FactoryMaker';
@@ -163,6 +163,7 @@ function ProtectionController(config) {
      * @private
      */
     function _handleKeySystemFromPssh(supportedKs) {
+        logger.warn('_handleKeySystemFromPssh');
         pendingKeySessionsToHandle.push(supportedKs);
         _selectKeySystemOrUpdateKeySessions(supportedKs, false);
     }
@@ -174,15 +175,19 @@ function ProtectionController(config) {
      * @private
      */
     function _selectKeySystemOrUpdateKeySessions(supportedKs, fromManifest) {
+        logger.warn('_selectKeySystemOrUpdateKeySessions');
         // First time, so we need to select a key system
         if (!selectedKeySystem && !keySystemSelectionInProgress) {
+            logger.warn('_selectKeySystemOrUpdateKeySessions:if')
             _selectInitialKeySystem(supportedKs, fromManifest);
         }
 
         // We already selected a key system. We only need to trigger a new license exchange if the init data has changed
         else if (selectedKeySystem) {
+            logger.warn('_selectKeySystemOrUpdateKeySessions:else-if')
             _handleKeySessions();
         }
+        logger.warn('_selectKeySystemOrUpdateKeySessions:end')
     }
 
     /**
@@ -192,7 +197,9 @@ function ProtectionController(config) {
      * @private
      */
     function _selectInitialKeySystem(supportedKs, fromManifest) {
+        logger.warn('_selectInitialKeySystem');
         if (!keySystemSelectionInProgress) {
+            logger.warn('_selectInitialKeySystem3');
             keySystemSelectionInProgress = true;
             const requestedKeySystems = [];
 
@@ -258,10 +265,12 @@ function ProtectionController(config) {
      * @private
      */
     function _handleKeySessions() {
+        logger.warn('_handleKeySessions');
         // Create key sessions for the different AdaptationSets
         let ksIdx;
         for (let i = 0; i < pendingKeySessionsToHandle.length; i++) {
             for (ksIdx = 0; ksIdx < pendingKeySessionsToHandle[i].length; ksIdx++) {
+                logger.warn(`${i}:${ksIdx}`);
                 if (selectedKeySystem === pendingKeySessionsToHandle[i][ksIdx].ks) {
                     const current = pendingKeySessionsToHandle[i][ksIdx]
                     _loadOrCreateKeySession(current)
@@ -278,6 +287,8 @@ function ProtectionController(config) {
      * @private
      */
     function _loadOrCreateKeySession(keySystemInfo) {
+        logger.warn('_loadOrCreateKeySession');
+        logger.warn(JSON.stringify(keySystemInfo));
         // Clearkey
         if (protectionKeyController.isClearKey(selectedKeySystem)) {
             // For Clearkey: if parameters for generating init data was provided by the user, use them for generating
@@ -287,15 +298,16 @@ function ProtectionController(config) {
                 keySystemInfo.initData = new TextEncoder().encode(JSON.stringify(initData));
             }
         }
-
         // Reuse existing KeySession
         if (keySystemInfo.sessionId) {
+            logger.warn(`_loadOrCreateKeySession:if ${keySystemInfo.sessionId}`);
             // Load MediaKeySession with sessionId
             loadKeySession(keySystemInfo);
         }
 
         // Create a new KeySession
         else if (keySystemInfo.initData !== null) {
+            logger.warn('_loadOrCreateKeySession:eles-if');
             // Create new MediaKeySession with initData
             createKeySession(keySystemInfo);
         }
@@ -326,32 +338,48 @@ function ProtectionController(config) {
      * @ignore
      */
     function createKeySession(keySystemInfo) {
-        const initDataForKS = CommonEncryption.getPSSHForKeySystem(selectedKeySystem, keySystemInfo ? keySystemInfo.initData : null);
+        logger.warn('createKeySession');
+        const initDataForKS = null;//CommonEncryption.getPSSHForKeySystem(selectedKeySystem, keySystemInfo ? keySystemInfo.initData : null);
 
         if (initDataForKS) {
+            logger.warn('createKeySession:if');
 
             // Check for duplicate key id
             if (_isKeyIdDuplicate(keySystemInfo.keyId)) {
+                logger.warn('createKeySession:if:if');
                 return;
             }
 
+
+            logger.warn('do not check duplicate~~~~~~~~~~~~~~~~~')
             // Check for duplicate initData
-            if (_isInitDataDuplicate(initDataForKS)) {
-                return;
-            }
+            // if (_isInitDataDuplicate(initDataForKS)) {
+            //     return;
+            // }
 
             try {
+                logger.warn('createKeySession:try');
+                logger.warn(JSON.stringify(JSON.stringify(keySystemInfo.initData)));
+                logger.warn('createKeySession:try:2');
+                logger.warn(keySystemInfo.initData.constructor.name);
                 keySystemInfo.initData = initDataForKS;
+                logger.warn(JSON.stringify(JSON.stringify(keySystemInfo.initData)));
+                logger.warn('createKeySession:try:3');
+                logger.warn(keySystemInfo.initData.constructor.name);
                 protectionModel.createKeySession(keySystemInfo);
+                logger.warn('createKeySession:try-end');
             } catch (error) {
+                logger.warn('createKeySession:try-catch');
                 eventBus.trigger(events.KEY_SESSION_CREATED, {
                     data: null,
                     error: new DashJSError(ProtectionErrors.KEY_SESSION_CREATED_ERROR_CODE, ProtectionErrors.KEY_SESSION_CREATED_ERROR_MESSAGE + error.message)
                 });
             }
         } else if (keySystemInfo && keySystemInfo.initData) {
+            logger.warn('createKeySession:else-if');
             protectionModel.createKeySession(keySystemInfo);
         } else {
+            logger.warn('createKeySession:else');
             eventBus.trigger(events.KEY_SESSION_CREATED, {
                 data: null,
                 error: new DashJSError(ProtectionErrors.KEY_SESSION_CREATED_ERROR_CODE, ProtectionErrors.KEY_SESSION_CREATED_ERROR_MESSAGE + 'Selected key system is ' + (selectedKeySystem ? selectedKeySystem.systemString : null) + '.  needkey/encrypted event contains no initData corresponding to that key system!')
@@ -434,26 +462,26 @@ function ProtectionController(config) {
      * @return {boolean}
      * @private
      */
-    function _isInitDataDuplicate(initDataForKS) {
-
-        if (!initDataForKS) {
-            return false;
-        }
-
-        try {
-            const currentInitData = protectionModel.getAllInitData();
-            for (let i = 0; i < currentInitData.length; i++) {
-                if (protectionKeyController.initDataEquals(initDataForKS, currentInitData[i])) {
-                    logger.debug('DRM: Ignoring initData because we have already seen it!');
-                    return true;
-                }
-            }
-
-            return false;
-        } catch (e) {
-            return false;
-        }
-    }
+    // function _isInitDataDuplicate(initDataForKS) {
+    //
+    //     if (!initDataForKS) {
+    //         return false;
+    //     }
+    //
+    //     try {
+    //         const currentInitData = protectionModel.getAllInitData();
+    //         for (let i = 0; i < currentInitData.length; i++) {
+    //             if (protectionKeyController.initDataEquals(initDataForKS, currentInitData[i])) {
+    //                 logger.debug('DRM: Ignoring initData because we have already seen it!');
+    //                 return true;
+    //             }
+    //         }
+    //
+    //         return false;
+    //     } catch (e) {
+    //         return false;
+    //     }
+    // }
 
     /**
      * Removes the given key session from persistent storage and closes the session
@@ -755,7 +783,7 @@ function ProtectionController(config) {
             withCredentials = protData.withCredentials;
         }
 
-        const onLoad = function (xhr) {
+        const onLoad = function(xhr) {
             if (!protectionModel) {
                 return;
             }
@@ -779,13 +807,13 @@ function ProtectionController(config) {
             }
         };
 
-        const onAbort = function (xhr) {
+        const onAbort = function(xhr) {
             _sendLicenseRequestCompleteEvent(eventData, new DashJSError(ProtectionErrors.MEDIA_KEY_MESSAGE_LICENSER_ERROR_CODE,
                 ProtectionErrors.MEDIA_KEY_MESSAGE_LICENSER_ERROR_MESSAGE + keySystemString + ' update, XHR aborted. status is "' +
                 xhr.statusText + '" (' + xhr.status + '), readyState is ' + xhr.readyState));
         };
 
-        const onError = function (xhr) {
+        const onError = function(xhr) {
             _sendLicenseRequestCompleteEvent(eventData, new DashJSError(ProtectionErrors.MEDIA_KEY_MESSAGE_LICENSER_ERROR_CODE,
                 ProtectionErrors.MEDIA_KEY_MESSAGE_LICENSER_ERROR_MESSAGE + keySystemString + ' update, XHR error. status is "' +
                 xhr.statusText + '" (' + xhr.status + '), readyState is ' + xhr.readyState));
@@ -862,16 +890,16 @@ function ProtectionController(config) {
             }
         }
 
-        const _retryRequest = function () {
+        const _retryRequest = function() {
             // fail silently and retry
             retriesCount--;
             const retryInterval = !isNaN(settings.get().streaming.retryIntervals[HTTPRequest.LICENSE]) ? settings.get().streaming.retryIntervals[HTTPRequest.LICENSE] : LICENSE_SERVER_REQUEST_RETRY_INTERVAL;
-            licenseRequestRetryTimeout = setTimeout(function () {
+            licenseRequestRetryTimeout = setTimeout(function() {
                 _doLicenseRequest(request, retriesCount, timeout, onLoad, onAbort, onError);
             }, retryInterval);
         };
 
-        xhr.onload = function () {
+        xhr.onload = function() {
             licenseXhrRequest = null;
             if (this.status >= 200 && this.status <= 299 || retriesCount <= 0) {
                 onLoad(this);
@@ -881,7 +909,7 @@ function ProtectionController(config) {
             }
         };
 
-        xhr.ontimeout = xhr.onerror = function () {
+        xhr.ontimeout = xhr.onerror = function() {
             licenseXhrRequest = null;
             if (retriesCount <= 0) {
                 onError(this);
@@ -891,7 +919,7 @@ function ProtectionController(config) {
             }
         };
 
-        xhr.onabort = function () {
+        xhr.onabort = function() {
             onAbort(this);
         };
 
@@ -1072,10 +1100,11 @@ function ProtectionController(config) {
             if (selectedKeySystem) {
                 const initDataForKS = CommonEncryption.getPSSHForKeySystem(selectedKeySystem, abInitData);
                 if (initDataForKS) {
+                    logger.error('do not check duplicate***************************')
                     // Check for duplicate initData
-                    if (_isInitDataDuplicate(initDataForKS)) {
-                        return;
-                    }
+                    // if (_isInitDataDuplicate(initDataForKS)) {
+                    //     return;
+                    // }
                 }
             }
 
@@ -1087,6 +1116,7 @@ function ProtectionController(config) {
                 return;
             }
 
+            logger.error(JSON.stringify(supportedKs, null, 2));
             _handleKeySystemFromPssh(supportedKs);
         }
     }
